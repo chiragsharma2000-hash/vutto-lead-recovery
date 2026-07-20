@@ -1,0 +1,777 @@
+<title>Offline Lead Recovery Agent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --paper:#F7F4EF; --surface:#FFFFFF; --surface-2:#FCFAF6; --ink:#211C17; --muted:#6E655C;
+  --hair:#E6DED3; --hair-strong:#D8CDBE; --accent:#DE5A24; --accent-ink:#B7461A; --steel:#33556E;
+  --hot:#D93A2B; --warm:#E07B1A; --low:#4C7A9E; --archive:#8C8578;
+  --ok:#2F8F5B; --review:#B9820E; --fail:#C8402F; --dup:#7A6FA8;
+  --shadow:0 1px 2px rgba(33,28,23,.05),0 8px 24px rgba(33,28,23,.06);
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono",Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#16120E; --surface:#201A14; --surface-2:#1A150F; --ink:#F1E9DE; --muted:#A99C8C;
+    --hair:#33291F; --hair-strong:#402F22; --accent:#F27438; --accent-ink:#F58c56; --steel:#7FA8C4;
+    --hot:#F2564A; --warm:#F2953A; --low:#6F9DC2; --archive:#A79E90;
+    --ok:#4FB37B; --review:#E0A62A; --fail:#EC6653; --dup:#A99BD6;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="light"]{
+  --paper:#F7F4EF; --surface:#FFFFFF; --surface-2:#FCFAF6; --ink:#211C17; --muted:#6E655C;
+  --hair:#E6DED3; --hair-strong:#D8CDBE; --accent:#DE5A24; --accent-ink:#B7461A; --steel:#33556E;
+  --hot:#D93A2B; --warm:#E07B1A; --low:#4C7A9E; --archive:#8C8578;
+  --ok:#2F8F5B; --review:#B9820E; --fail:#C8402F; --dup:#7A6FA8;
+  --shadow:0 1px 2px rgba(33,28,23,.05),0 8px 24px rgba(33,28,23,.06);
+}
+:root[data-theme="dark"]{
+  --paper:#16120E; --surface:#201A14; --surface-2:#1A150F; --ink:#F1E9DE; --muted:#A99C8C;
+  --hair:#33291F; --hair-strong:#402F22; --accent:#F27438; --accent-ink:#F58c56; --steel:#7FA8C4;
+  --hot:#F2564A; --warm:#F2953A; --low:#6F9DC2; --archive:#A79E90;
+  --ok:#4FB37B; --review:#E0A62A; --fail:#EC6653; --dup:#A99BD6;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.5;
+  -webkit-font-smoothing:antialiased;font-size:15px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 80px}
+.mono{font-family:var(--mono)}
+.tnum{font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* ---- Command bar ---- */
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--hair)}
+.bar{max-width:1180px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:38px;height:38px;border-radius:9px;background:
+  radial-gradient(circle at 30% 30%,var(--accent),var(--accent-ink));position:relative;flex:none;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.logo::after{content:"";position:absolute;inset:0;margin:auto;width:14px;height:14px;border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.9);border-top-color:transparent;transform:rotate(20deg)}
+.brand h1{font-size:16px;margin:0;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.brand p{margin:0;font-size:11.5px;color:var(--muted);font-family:var(--mono);letter-spacing:.03em}
+.ctrl{display:flex;align-items:center;gap:8px}
+.ctrl label{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+input,select,textarea{font-family:var(--sans);font-size:14px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--hair-strong);border-radius:8px;padding:8px 10px;width:100%}
+input[type=date]{font-family:var(--mono);font-size:13px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+button{font-family:var(--sans);cursor:pointer;border:1px solid transparent;border-radius:8px;font-weight:600;
+  font-size:13.5px;padding:9px 14px;background:var(--surface);color:var(--ink);border-color:var(--hair-strong);
+  transition:transform .05s ease, background .15s ease}
+button:hover{background:var(--surface-2)}
+button:active{transform:translateY(1px)}
+button.primary{background:var(--accent);color:#fff;border-color:transparent;
+  box-shadow:0 1px 0 rgba(0,0,0,.06)}
+button.primary:hover{background:var(--accent-ink)}
+button.ghost{background:transparent}
+.iconbtn{width:38px;height:38px;padding:0;display:grid;place-items:center;font-size:16px}
+
+/* ---- Tabs ---- */
+.tabs{display:flex;gap:4px;margin:22px 0 18px;border-bottom:1px solid var(--hair)}
+.tab{background:none;border:none;border-radius:0;padding:10px 4px;margin-right:22px;color:var(--muted);
+  font-weight:700;font-size:14px;position:relative}
+.tab[aria-selected=true]{color:var(--ink)}
+.tab[aria-selected=true]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2.5px;
+  background:var(--accent);border-radius:2px}
+.tab .dot{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:6px}
+
+/* ---- Cards / grid ---- */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);gap:20px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--hair);border-radius:14px;box-shadow:var(--shadow)}
+.card-h{padding:14px 18px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:10px}
+.card-h h2{font-size:14px;margin:0;font-weight:800;letter-spacing:-.01em}
+.card-b{padding:18px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.form-grid .full{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:5px}
+.field>label{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--hair-strong);border-radius:8px;overflow:hidden}
+.seg button{flex:1;border:none;border-radius:0;padding:8px 4px;font-size:13px;background:var(--surface);color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--steel);color:#fff}
+.form-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+/* lead-type funnel selector */
+.leadtype{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+@media(max-width:520px){.leadtype{grid-template-columns:1fr}}
+.lt{border:1.5px solid var(--hair-strong);border-radius:12px;padding:12px 14px;background:var(--surface);
+  cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px;transition:border-color .15s,background .15s}
+.lt:hover{background:var(--surface-2)}
+.lt[aria-pressed=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface));
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.lt .lt-t{font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px}
+.lt .lt-s{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.02em}
+.lt .lt-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.lt .lt-badge{margin-left:auto;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--hair);color:var(--muted)}
+.lt[aria-pressed=true] .lt-badge{background:var(--accent);color:#fff}
+
+/* ---- Signal readout ---- */
+.readout{display:flex;flex-direction:column;gap:16px}
+.gauge-wrap{display:flex;flex-direction:column;gap:8px}
+.gauge-top{display:flex;align-items:baseline;justify-content:space-between}
+.score{font-family:var(--mono);font-weight:700;font-size:44px;line-height:1;letter-spacing:-.02em}
+.score small{font-size:16px;color:var(--muted);font-weight:400}
+.cohort-chip{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.03em;padding:6px 12px;
+  border-radius:999px;color:#fff;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.cohort-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.9)}
+.gauge{position:relative;height:16px;border-radius:8px;overflow:hidden;display:flex;
+  border:1px solid var(--hair);background:var(--hair)}
+.gauge i{display:block;height:100%}
+.gauge .needle{position:absolute;top:-5px;bottom:-5px;width:3px;background:var(--ink);border-radius:2px;
+  transform:translateX(-1.5px);transition:left .45s cubic-bezier(.2,.7,.2,1);box-shadow:0 0 0 2px var(--surface)}
+.gauge-scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.bands{display:flex;gap:6px;font-family:var(--mono);font-size:10px;color:var(--muted);flex-wrap:wrap}
+.bands span{display:inline-flex;align-items:center;gap:5px}
+.bands span::before{content:"";width:9px;height:9px;border-radius:3px}
+.rows{display:flex;flex-direction:column;gap:1px;background:var(--hair);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.row{display:flex;justify-content:space-between;gap:12px;padding:11px 14px;background:var(--surface)}
+.row .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);flex:none}
+.row .v{text-align:right;font-weight:600;font-size:13.5px}
+.tag{display:inline-block;font-family:var(--mono);font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:6px;
+  background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent-ink)}
+.pill{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.03em}
+.src{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.breakdown{display:flex;flex-direction:column;gap:0}
+.bd{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--hair);font-size:13px}
+.bd:last-child{border-bottom:none}
+.bd .p{font-family:var(--mono);font-weight:700}
+.bd .p.pos{color:var(--ok)} .bd .p.neg{color:var(--fail)}
+.action{background:color-mix(in srgb,var(--accent) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--hair));
+  border-radius:10px;padding:13px 15px}
+.action .lab{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:4px}
+.action .txt{font-weight:700;font-size:14px}
+.priority{margin-top:8px;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--fail);
+  display:none;align-items:center;gap:7px}
+.priority.on{display:flex}
+.priority::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--fail);
+  box-shadow:0 0 0 0 var(--fail);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--fail) 60%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media(prefers-reduced-motion:reduce){.priority::before{animation:none}.gauge .needle{transition:none}}
+/* clean CRM record card (replaces raw JSON) */
+.crmcard{border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--surface-2)}
+.crmcard .cc-top{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--hair);
+  background:var(--surface)}
+.crmcard .cc-op{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:3px 9px;border-radius:6px}
+.crmcard .cc-id{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-left:auto}
+.crmcard .cc-note{padding:12px 14px;font-size:13.5px;line-height:1.5;border-bottom:1px solid var(--hair);color:var(--ink)}
+.crmcard .cc-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hair)}
+@media(max-width:520px){.crmcard .cc-grid{grid-template-columns:1fr}}
+.crmcard .cc-f{background:var(--surface-2);padding:9px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.crmcard .cc-f .cl{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.crmcard .cc-f .cv{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.banner{border-radius:10px;padding:11px 14px;font-size:13px;font-weight:600;display:none;align-items:center;gap:9px}
+.banner.on{display:flex}
+.banner.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.banner.warn{background:color-mix(in srgb,var(--review) 16%,transparent);color:var(--review)}
+
+/* ---- Batch ---- */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+@media(max-width:820px){.tiles{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:480px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--surface);border:1px solid var(--hair);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.tile .n{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.tile .l{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.tile .stripe{height:3px;border-radius:2px;margin-top:10px;background:var(--hair)}
+.distro{background:var(--surface);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;margin-bottom:18px;box-shadow:var(--shadow)}
+.distro h3{margin:0 0 12px;font-size:13px}
+.heatbar{display:flex;height:26px;border-radius:7px;overflow:hidden;border:1px solid var(--hair)}
+.heatbar i{display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--mono);font-size:11px;font-weight:700;min-width:0}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend span::before{content:"";width:10px;height:10px;border-radius:3px}
+.tablewrap{overflow-x:auto;border:1px solid var(--hair);border-radius:12px;background:var(--surface);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:760px}
+th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  padding:11px 12px;border-bottom:1px solid var(--hair-strong);position:sticky;top:0;background:var(--surface);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.badge{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.mini-gauge{width:60px;height:8px;border-radius:5px;background:var(--hair);overflow:hidden;display:inline-block;vertical-align:middle}
+.mini-gauge i{display:block;height:100%}
+.status-note{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:auto}
+.empty{padding:40px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px}
+.foot{margin-top:26px;font-size:12px;color:var(--muted);font-family:var(--mono);line-height:1.7}
+.foot code{background:var(--surface-2);border:1px solid var(--hair);padding:1px 6px;border-radius:5px}
+.hide{display:none}
+</style>
+
+<header>
+  <div class="bar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>Offline Lead Recovery Agent</h1>
+        <p>showroom excel &rarr; classify &middot; score &middot; cohort &middot; sync</p>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label for="asof">As&nbsp;of</label>
+      <input type="date" id="asof" style="width:150px" value="2026-07-20">
+    </div>
+    <button class="iconbtn ghost" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" id="tab-intake">Lead Intake</button>
+    <button class="tab" role="tab" aria-selected="false" id="tab-batch">Batch Run<span class="dot" id="batchDot"></span></button>
+  </div>
+
+  <!-- ============ INTAKE ============ -->
+  <section id="view-intake">
+    <div class="grid">
+      <!-- form -->
+      <div class="card">
+        <div class="card-h"><span class="eyebrow">01 &middot; Intake</span><h2>Showroom Visit Feedback</h2></div>
+        <div class="card-b">
+          <div class="leadtype" id="f_leadtype" data-val="New" role="group" aria-label="Lead type">
+            <button class="lt" data-v="New" aria-pressed="true" type="button">
+              <span class="lt-t"><i class="lt-dot" style="background:var(--ok)"></i>New lead<span class="lt-badge">create</span></span>
+              <span class="lt-s">Walked into the showroom</span>
+            </button>
+            <button class="lt" data-v="Existing" aria-pressed="false" type="button">
+              <span class="lt-t"><i class="lt-dot" style="background:var(--steel)"></i>Existing lead<span class="lt-badge">update</span></span>
+              <span class="lt-s">Booked a visit &middot; called in</span>
+            </button>
+          </div>
+          <div class="form-grid">
+            <div class="field"><label>Customer name</label><input id="f_name" value="Ramesh Gupta"></div>
+            <div class="field"><label>Phone number</label><input id="f_phone" value="+91 98200-45671"></div>
+            <div class="field"><label>Email</label><input id="f_email" value="ramesh.g@example.com"></div>
+            <div class="field"><label>Store location</label><input id="f_store" value="Delhi - Dwarka"></div>
+            <div class="field"><label>Visit date</label><input type="date" id="f_visit" value="2026-07-19"></div>
+            <div class="field"><label>Lead source</label>
+              <select id="f_source"><option>Walk-in</option><option>Meta Ad</option><option>Website</option><option>Referral</option><option>WhatsApp</option><option>Google Search</option></select></div>
+            <div class="field"><label>Interested vehicle</label><input id="f_vehicle" value="Activa 6G"></div>
+            <div class="field"><label>Preferred channel</label>
+              <select id="f_channel"><option>Phone Call</option><option>SMS</option><option>WhatsApp</option><option>Email</option></select></div>
+            <div class="field"><label>Budget min (₹)</label><input id="f_bmin" value="45000"></div>
+            <div class="field"><label>Budget max (₹)</label><input id="f_bmax" value="60000"></div>
+            <div class="field"><label>Purchase intent</label>
+              <div class="seg" id="f_intent" data-val="High">
+                <button data-v="High" aria-pressed="true">High</button>
+                <button data-v="Medium" aria-pressed="false">Medium</button>
+                <button data-v="Low" aria-pressed="false">Low</button></div></div>
+            <div class="field"><label>Test ride taken</label>
+              <div class="seg" id="f_testride" data-val="Yes">
+                <button data-v="Yes" aria-pressed="true">Yes</button>
+                <button data-v="No" aria-pressed="false">No</button></div></div>
+            <div class="field"><label>Financing needed</label>
+              <div class="seg" id="f_finance" data-val="Yes">
+                <button data-v="Yes" aria-pressed="true">Yes</button>
+                <button data-v="No" aria-pressed="false">No</button></div></div>
+            <div class="field"><label>Exchange vehicle</label>
+              <div class="seg" id="f_exchange" data-val="No">
+                <button data-v="Yes" aria-pressed="false">Yes</button>
+                <button data-v="No" aria-pressed="true">No</button></div></div>
+            <div class="field full"><label>Non-purchase reason (dropdown)</label>
+              <select id="f_reason"><option value="">— none / infer from notes —</option></select></div>
+            <div class="field full"><label>Sales rep notes (free text)</label>
+              <textarea id="f_notes" rows="2">Loved the ride but said the EMI is too high for his monthly budget.</textarea></div>
+          </div>
+          <div class="form-actions">
+            <button class="primary" id="analyzeBtn">Analyze &amp; Sync to CRM</button>
+            <button class="ghost" id="randomBtn">Load a random sample lead</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- readout -->
+      <div class="card">
+        <div class="card-h"><span class="eyebrow">02 &middot; Agent</span><h2>Signal Readout</h2></div>
+        <div class="card-b readout">
+          <div class="banner" id="valBanner"></div>
+          <div class="gauge-wrap">
+            <div class="gauge-top">
+              <div class="score tnum"><span id="scoreVal">—</span><small>/100</small></div>
+              <span class="cohort-chip" id="cohortChip" style="background:var(--muted)">—</span>
+            </div>
+            <div class="gauge" id="gauge">
+              <i style="width:25%;background:var(--archive)"></i>
+              <i style="width:25%;background:var(--low)"></i>
+              <i style="width:25%;background:var(--warm)"></i>
+              <i style="width:25%;background:var(--hot)"></i>
+              <div class="needle" id="needle" style="left:0%"></div>
+            </div>
+            <div class="gauge-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+            <div class="bands">
+              <span style="--c:var(--archive)">Archive 0–24</span>
+              <span style="--c:var(--low)">Low 25–49</span>
+              <span style="--c:var(--warm)">Warm 50–74</span>
+              <span style="--c:var(--hot)">Hot 75–100</span>
+            </div>
+          </div>
+
+          <div class="rows">
+            <div class="row"><span class="k">Funnel</span><span class="v" id="funnelVal">—</span></div>
+            <div class="row"><span class="k">Objection</span><span class="v"><span class="tag" id="objTag">—</span> <span class="src" id="objSrc"></span></span></div>
+            <div class="row"><span class="k">CRM operation</span><span class="v" id="matchVal">—</span></div>
+            <div class="row"><span class="k">Follow-up</span><span class="v" id="chanVal">—</span></div>
+          </div>
+
+          <div>
+            <div class="eyebrow" style="margin-bottom:8px">Score breakdown</div>
+            <div class="breakdown" id="breakdown"></div>
+          </div>
+
+          <div class="action">
+            <div class="lab">Recommended next best action</div>
+            <div class="txt" id="playbookVal">—</div>
+            <div class="priority" id="priorityFlag">Priority callback — contact within 2 h</div>
+          </div>
+
+          <div>
+            <div class="eyebrow" style="margin-bottom:8px">What gets written to the CRM</div>
+            <div class="crmcard" id="crmCard"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ledger -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-h"><span class="eyebrow">03 &middot; Mock CRM</span><h2>CRM Ledger</h2>
+        <span class="status-note" id="ledgerNote">no leads synced yet</span>
+        <button class="ghost" id="exportLedger" style="margin-left:12px;padding:6px 11px;font-size:12px">Export to CRM (JSON)</button></div>
+      <div class="tablewrap" style="border:none;border-radius:0;box-shadow:none">
+        <table id="ledgerTable">
+          <thead><tr><th>#</th><th>CRM ID</th><th>Customer</th><th>Phone</th><th>Type</th><th>Objection</th><th>Score</th><th>Cohort</th><th>Operation</th></tr></thead>
+          <tbody><tr><td colspan="9" class="empty">Synced leads appear here. Phone number is the match key — re-syncing a phone updates instead of creating.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BATCH ============ -->
+  <section id="view-batch" class="hide">
+    <div class="toolbar">
+      <button class="primary" id="runBatch">Load 40 sample leads &amp; run pipeline</button>
+      <button class="ghost" id="resetCrm">Reset CRM store</button>
+      <span class="status-note" id="batchNote">CRM store empty</span>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="distro" id="distro" style="display:none">
+      <h3>Recovery cohort distribution</h3>
+      <div class="heatbar" id="heatbar"></div>
+      <div class="legend">
+        <span style="--c:var(--hot)">Hot recovery</span>
+        <span style="--c:var(--warm)">Warm nurture</span>
+        <span style="--c:var(--low)">Low-priority nurture</span>
+        <span style="--c:var(--archive)">Archive/slow drip</span>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table id="batchTable">
+        <thead><tr><th>Lead</th><th>Customer</th><th>Funnel</th><th>Store</th><th>Objection</th><th>Warmness</th><th>Cohort</th><th>Playbook</th><th>Sync</th></tr></thead>
+        <tbody><tr><td colspan="9" class="empty">Press <b>Run pipeline</b> to process the 40 sample showroom leads end-to-end.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="foot">
+    Fully client-side demo of the Python pipeline — mirrors <code>config/rules.json</code> exactly.
+    Scoring, taxonomy, cohorts &amp; playbooks are data-driven &middot; recency uses the <b>As of</b> date above.
+    Backend equivalent: <code>python -m src.main --input data/showroom_leads.xlsx</code>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — mirror of config/rules.json
+   ============================================================ */
+const CFG = {
+  taxonomy:["Price too high","EMI too high","Financing rejected","Wanted different model","Condition concern","Trust/certification doubt","Family decision pending","Comparing with other dealers","Will buy later","Documentation concern","Exchange value too low","No immediate need"],
+  synonyms:{
+    "Price too high":["price too high","too expensive","price is high","costly","over budget","out of budget","expensive","high price","above budget","final quote felt above"],
+    "EMI too high":["emi too high","emi high","installment too high","monthly too high","high emi","emi is high","monthly emi felt expensive"],
+    "Financing rejected":["financing rejected","loan rejected","loan denied","finance rejected","credit rejected","loan not approved","cibil","finance declined","finance check did not go through"],
+    "Wanted different model":["wanted different model","different model","another model","other model","wanted another","different color","different variant","not available in store"],
+    "Condition concern":["condition concern","body condition","wear and tear","scratches","dents","not clean","cleaner body","visible wear","quality concern"],
+    "Trust/certification doubt":["trust","certification","not certified","authenticity","doubt on quality","trust issue","certificate","questions about certification","warranty"],
+    "Family decision pending":["family decision pending","family decision","discuss with family","spouse","wife","husband","parents","family approval","consult family","parent approval"],
+    "Comparing with other dealers":["comparing with other dealers","comparing","other dealer","checking other","quote from other","competitor","other showroom","compare options nearby"],
+    "Will buy later":["will buy later","buy later","next month","not now","postponed","pushed to next","future purchase","come back later","purchase pushed"],
+    "Documentation concern":["documentation concern","documentation","documents","rc transfer","paperwork","papers pending","ownership transfer","insurance papers"],
+    "Exchange value too low":["exchange value too low","exchange value","exchange valuation","low exchange","trade in","trade-in","exchange price","old vehicle value","did not like the exchange"],
+    "No immediate need":["no immediate need","no need","just looking","browsing","no urgency","not urgent","casual visit","window shopping","just exploring","no urgent purchase"]
+  },
+  stop:new Set(["a","an","the","is","are","was","were","be","been","being","to","of","for","them","they","he","she","we","i","it","on","in","at","with","and","said","says","customer","client","buyer","that","this","these","those","as","his","her","their","our","there","here","would","will","did","does","do","has","have","but","felt","go","not"]),
+  recency:[{d:3,p:25},{d:7,p:18},{d:14,p:8}],
+  testRide:20, financing:10,
+  intent:{High:20,Medium:10,Low:0},
+  penalty:{"Will buy later":-15,"No immediate need":-20,"Financing rejected":-10,"Condition concern":-8,"Trust/certification doubt":-6,"Documentation concern":-5,"Comparing with other dealers":-5,"Price too high":-4,"Exchange value too low":-4,"Family decision pending":-3,"EMI too high":-2,"Wanted different model":-1},
+  cohorts:[{n:"Hot recovery",min:75,max:100,c:"var(--hot)"},{n:"Warm nurture",min:50,max:74,c:"var(--warm)"},{n:"Low-priority nurture",min:25,max:49,c:"var(--low)"},{n:"Archive/slow drip",min:0,max:24,c:"var(--archive)"}],
+  priorityThreshold:75, prioritySla:2,
+  playbooks:{"Price too high":"Offer alternate model or limited discount","EMI too high":"Share lower EMI / revised down payment options","Financing rejected":"Route to alternate lender or finance specialist","Wanted different model":"Notify when matching stock is available","Condition concern":"Send inspection proof and warranty details","Trust/certification doubt":"Share reviews, certification details, testimonials","Family decision pending":"Send comparison sheet and schedule revisit","Comparing with other dealers":"Send urgency note and trust differentiators","Will buy later":"Put into 7-21 day nurture sequence","Documentation concern":"Assign paperwork callback","Exchange value too low":"Trigger revaluation/exchange follow-up","No immediate need":"Slow drip educational nurture","Unclassified":"Manual review by sales rep to determine objection"}
+};
+const UNCLASSIFIED="Unclassified";
+
+/* ============================================================
+   PIPELINE LOGIC (ported from src/*.py)
+   ============================================================ */
+const normText=s=>(s||"").toLowerCase().match(/[a-z0-9\-\/]+/g)?.filter(t=>!CFG.stop.has(t)).join(" ")||"";
+
+function classify(reason,notes){
+  reason=(reason||"").trim();
+  if(CFG.taxonomy.includes(reason)) return {objection:reason,source:"exact_reason"};
+  const scan=(txt)=>{const low=normText(txt);let best=null;
+    for(const[obj,kws]of Object.entries(CFG.synonyms))for(const kw of kws){
+      if(low.includes(normText(kw))&&(!best||kw.length>best.kw.length))best={obj,kw};}
+    return best;};
+  let m=reason?scan(reason):null; if(m)return{objection:m.obj,source:"synonym_reason"};
+  m=notes?scan(notes):null; if(m)return{objection:m.obj,source:"synonym_notes"};
+  return {objection:UNCLASSIFIED,source:"none"};
+}
+
+function normPhone(v){
+  if(v==null)return{phone:null,err:"missing phone_number"};
+  let d=String(v).replace(/\D+/g,"");
+  if(d.length===12&&d.startsWith("91"))d=d.slice(2);
+  else if(d.length===11&&d.startsWith("0"))d=d.slice(1);
+  if(d.length!==10)return{phone:null,err:`invalid phone_number '${v}'`};
+  if(!"6789".includes(d[0]))return{phone:null,err:`implausible phone_number '${v}'`};
+  return {phone:d,err:null};
+}
+const daysBetween=(a,b)=>Math.round((a-b)/86400000);
+
+function scoreLead(lead,asOf){
+  const bd=[]; const vd=lead.visit_date?new Date(lead.visit_date):null;
+  if(vd){let dd=daysBetween(asOf,vd); if(dd<0)dd=0;
+    let p=0,hit=false;
+    for(const t of CFG.recency){if(dd<=t.d){p=t.p;hit=true;break;}}
+    bd.push([`recency (visit ${dd}d ago)`,p]);
+  } else bd.push(["recency (no visit date)",0]);
+  if(lead.test_ride_taken===true)bd.push(["test ride taken",CFG.testRide]);
+  if(lead.financing_needed===true)bd.push(["financing needed",CFG.financing]);
+  const ip=CFG.intent[lead.purchase_intent]??0;
+  bd.push([`purchase intent = ${lead.purchase_intent}`,ip]);
+  const pen=CFG.penalty[lead.objection]||0;
+  if(pen)bd.push([`objection: ${lead.objection}`,pen]);
+  const raw=bd.reduce((s,[,p])=>s+p,0);
+  return {score:Math.max(0,Math.min(100,raw)),breakdown:bd};
+}
+function cohortFor(score){for(const b of CFG.cohorts)if(score>=b.min&&score<=b.max)return b;return CFG.cohorts[3];}
+const yn=v=>v===true?"Yes":v===false?"No":"—";
+const toBool=v=>{if(v==null)return null;const s=String(v).trim().toLowerCase();
+  if(["yes","y","true","1"].includes(s))return true;if(["no","n","false","0",""].includes(s))return false;return null;};
+
+/* Build the enriched lead + CRM payload from a normalized input object */
+function process(input,asOf){
+  const {phone,err}=normPhone(input.phone_number);
+  const warnings=[];
+  let bmin=input.budget_min_inr!=null?parseInt(String(input.budget_min_inr).replace(/\D/g,"")):null;
+  let bmax=input.budget_max_inr!=null?parseInt(String(input.budget_max_inr).replace(/\D/g,"")):null;
+  if(bmin!=null&&bmax!=null&&bmin>bmax){[bmin,bmax]=[bmax,bmin];warnings.push("budget_min>max (swapped)");}
+  let email=(input.email||"").trim()||null;
+  if(email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){warnings.push(`invalid email '${email}'`);email=null;}
+  const cls=classify(input.non_purchase_reason,input.sales_rep_notes);
+  const lead={
+    lead_id:input.lead_id||null,customer_name:(input.customer_name||"").trim()||null,
+    phone_number:phone,email,store_location:(input.store_location||"").trim()||null,
+    visit_date:input.visit_date||null,lead_source:input.lead_source||null,
+    interested_vehicle:input.interested_vehicle||null,budget_min_inr:bmin,budget_max_inr:bmax,
+    purchase_intent:["High","Medium","Low"].includes(input.purchase_intent)?input.purchase_intent:"Low",
+    test_ride_taken:toBool(input.test_ride_taken),financing_needed:toBool(input.financing_needed),
+    family_decision_pending:toBool(input.family_decision_pending),exchange_vehicle:toBool(input.exchange_vehicle),
+    non_purchase_reason:(input.non_purchase_reason||"").trim()||null,
+    sales_rep_notes:(input.sales_rep_notes||"").trim()||null,
+    preferred_followup_channel:input.preferred_followup_channel||null,
+    lead_type:input.lead_type==="Existing"?"Existing":"New",
+    objection:cls.objection,objection_source:cls.source,warnings,valid:!err,error:err
+  };
+  lead.funnel_stage=lead.lead_type==="Existing"?"Booked visit — called in":"Walk-in";
+  lead.crm_intent=lead.lead_type==="Existing"?"update":"create";
+  const sc=scoreLead(lead,asOf); lead.warmness_score=sc.score; lead.breakdown=sc.breakdown;
+  const co=cohortFor(sc.score); lead.recovery_cohort=co.n; lead.cohort_color=co.c;
+  lead.priority=sc.score>=CFG.priorityThreshold;
+  lead.playbook=CFG.playbooks[lead.objection]||CFG.playbooks[UNCLASSIFIED];
+  const acts=[]; if(lead.priority)acts.push(`PRIORITY: call back within ${CFG.prioritySla}h`);
+  acts.push(lead.playbook); if(lead.preferred_followup_channel)acts.push(`via ${lead.preferred_followup_channel}`);
+  lead.next_best_action=acts.join(" | ");
+  return lead;
+}
+function buildPayload(lead){
+  const store=lead.store_location||"showroom";
+  return {
+    lead_id:lead.lead_id,customer_name:lead.customer_name,phone_number:lead.phone_number,email:lead.email,
+    lead_type:lead.lead_type,funnel_stage:lead.funnel_stage,
+    store_location:lead.store_location,visit_date:lead.visit_date,lead_source:lead.lead_source,
+    interested_vehicle:lead.interested_vehicle,budget_min_inr:lead.budget_min_inr,budget_max_inr:lead.budget_max_inr,
+    purchase_intent:lead.purchase_intent,test_ride_taken:lead.test_ride_taken,financing_needed:lead.financing_needed,
+    objection:lead.objection,objection_source:lead.objection_source,warmness_score:lead.warmness_score,
+    recovery_cohort:lead.recovery_cohort,recommended_playbook:lead.playbook,next_best_action:lead.next_best_action,
+    priority_callback:lead.priority,priority_sla_hours:lead.priority?CFG.prioritySla:null,
+    preferred_followup_channel:lead.preferred_followup_channel,
+    notes_for_crm:`Offline showroom visit recorded at ${store}; reason tagged as ${lead.objection}; next step: ${lead.playbook}.`,
+    data_quality_warnings:lead.warnings
+  };
+}
+
+/* ============================================================
+   MOCK CRM (in-memory, phone = match key)
+   ============================================================ */
+const CRM={store:new Map(),counter:5000,
+  find(p){return this.store.get(p)||null;},
+  seedExisting(p){if(!this.store.has(p)){this.counter++;
+    this.store.set(p,{crm_lead_id:"CRM-"+this.counter,phone_number:p,seeded:true,action:"booked"});}},
+  sync(payload,intent){const p=payload.phone_number;const ex=this.find(p);
+    if(ex){Object.assign(ex,payload);ex.action="update";
+      const note=intent==="create"?"returning visitor — matched existing CRM record":"existing lead updated";
+      return{id:ex.crm_lead_id,action:"update",match:"Matched existing lead",note};}
+    this.counter++;const id="CRM-"+this.counter;this.store.set(p,{crm_lead_id:id,...payload,action:"create"});
+    const note=intent==="update"?"was not in CRM yet — created new record":"new lead created";
+    return{id,action:"create",match:"New lead to create",note};},
+  reset(){this.store.clear();this.counter=5000;}
+};
+
+/* ============================================================
+   UI WIRING
+   ============================================================ */
+const $=id=>document.getElementById(id);
+// populate reason dropdown
+CFG.taxonomy.forEach(t=>{const o=document.createElement("option");o.textContent=t;$("f_reason").appendChild(o);});
+// segmented controls
+document.querySelectorAll(".seg").forEach(seg=>seg.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;
+  seg.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  seg.dataset.val=b.dataset.v;}));
+
+function readForm(){return{
+  lead_id:null,customer_name:$("f_name").value,phone_number:$("f_phone").value,email:$("f_email").value,
+  store_location:$("f_store").value,visit_date:$("f_visit").value,lead_source:$("f_source").value,
+  interested_vehicle:$("f_vehicle").value,budget_min_inr:$("f_bmin").value,budget_max_inr:$("f_bmax").value,
+  purchase_intent:$("f_intent").dataset.val,test_ride_taken:$("f_testride").dataset.val,
+  financing_needed:$("f_finance").dataset.val,exchange_vehicle:$("f_exchange").dataset.val,
+  non_purchase_reason:$("f_reason").value,sales_rep_notes:$("f_notes").value,
+  preferred_followup_channel:$("f_channel").value,lead_type:$("f_leadtype").dataset.val };}
+
+function asOfDate(){const v=$("asof").value;return v?new Date(v+"T00:00:00"):new Date();}
+
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const inr=n=>n==null?null:"₹"+Number(n).toLocaleString("en-IN");
+
+/* Clean, rep-friendly summary of the record that syncs to the CRM (replaces raw JSON) */
+function renderCrmCard(lead,sync){
+  const p=buildPayload(lead);
+  const blocked=!lead.valid||lead.objection===UNCLASSIFIED;
+  let op,opColor,opId;
+  if(blocked){op="NOT SYNCED · MANUAL REVIEW";opColor="var(--review)";opId="held back";}
+  else if(sync){op=sync.action==="update"?"UPDATE EXISTING":"CREATE NEW";
+    opColor=sync.action==="update"?"var(--dup)":"var(--ok)";opId=sync.id;}
+  else{op=lead.crm_intent==="update"?"WILL UPDATE":"WILL CREATE";opColor="var(--steel)";opId="preview";}
+
+  const budget=(p.budget_min_inr!=null&&p.budget_max_inr!=null)?`${inr(p.budget_min_inr)} – ${inr(p.budget_max_inr)}`:"—";
+  const fields=[
+    ["Customer",p.customer_name],["Phone",p.phone_number],
+    ["Vehicle",p.interested_vehicle],["Budget",budget],
+    ["Visit date",p.visit_date],["Lead source",p.lead_source],
+    ["Funnel",p.funnel_stage],["Follow-up channel",p.preferred_followup_channel],
+    ["Objection",p.objection],["Warmness",`${p.warmness_score} / 100 · ${p.recovery_cohort}`],
+    ["Next best action",p.next_best_action],
+  ];
+  const grid=fields.filter(([,v])=>v!=null&&v!=="").map(([k,v])=>
+    `<div class="cc-f"><span class="cl">${k}</span><span class="cv">${esc(v)}</span></div>`).join("");
+
+  $("crmCard").innerHTML=`
+    <div class="cc-top">
+      <span class="cc-op" style="background:color-mix(in srgb,${opColor} 16%,transparent);color:${opColor}">${op}</span>
+      <span class="cc-id">${opId}</span>
+    </div>
+    <div class="cc-note">${esc(p.notes_for_crm)}</div>
+    <div class="cc-grid">${grid}</div>`;
+}
+
+function renderReadout(lead,sync){
+  const b=$("valBanner");
+  if(!lead.valid){b.className="banner warn on";b.textContent="⚠ "+lead.error+" — routed to manual review, not synced.";}
+  else if(lead.objection===UNCLASSIFIED){b.className="banner warn on";b.textContent="⚠ Objection could not be classified — routed to manual review.";}
+  else if(sync){b.className="banner ok on";
+    b.textContent=`✓ ${sync.action==="update"?"Updated":"Created"} in CRM as ${sync.id} — ${sync.note}.`;}
+  else if(lead.warnings.length){b.className="banner warn on";b.textContent="⚠ "+lead.warnings.join("; ")+" — preview only.";}
+  else{b.className="banner ok on";b.textContent="✓ Live preview — press Analyze & Sync to write to the mock CRM.";}
+
+  $("funnelVal").textContent=lead.funnel_stage+"  ·  intent: "+lead.crm_intent;
+  $("scoreVal").textContent=lead.warmness_score;
+  $("needle").style.left=lead.warmness_score+"%";
+  const chip=$("cohortChip");chip.textContent=lead.recovery_cohort;chip.style.background=lead.cohort_color;
+  const ot=$("objTag");ot.textContent=lead.objection;
+  ot.style.background=lead.objection===UNCLASSIFIED?"color-mix(in srgb,var(--review) 18%,transparent)":"color-mix(in srgb,var(--accent) 14%,transparent)";
+  $("objSrc").textContent=lead.objection_source!=="none"?"via "+lead.objection_source:"";
+  $("matchVal").textContent=sync?`${sync.action.toUpperCase()} · ${sync.match} (${sync.id})`:"— (preview)";
+  $("chanVal").textContent=lead.preferred_followup_channel||"—";
+
+  const bd=$("breakdown");bd.innerHTML="";
+  lead.breakdown.forEach(([label,p])=>{const d=document.createElement("div");d.className="bd";
+    d.innerHTML=`<span>${label}</span><span class="p ${p>=0?'pos':'neg'}">${p>=0?'+':''}${p}</span>`;bd.appendChild(d);});
+  const tot=document.createElement("div");tot.className="bd";
+  tot.innerHTML=`<span style="font-weight:700">Total (clamped 0–100)</span><span class="p" style="font-weight:800">${lead.warmness_score}</span>`;bd.appendChild(tot);
+
+  $("playbookVal").textContent=lead.playbook;
+  $("priorityFlag").className="priority"+(lead.priority?" on":"");
+  renderCrmCard(lead,sync);
+}
+
+function renderLedger(){
+  const rows=[...CRM.store.values()];
+  $("ledgerNote").textContent=rows.length?`${rows.length} lead${rows.length>1?"s":""} in CRM`:"no leads synced yet";
+  const tb=$("ledgerTable").querySelector("tbody");
+  if(!rows.length){tb.innerHTML='<tr><td colspan="9" class="empty">Synced leads appear here. Phone is the match key — re-syncing a phone updates instead of creating.</td></tr>';return;}
+  tb.innerHTML=rows.filter(r=>!r.seeded||r.customer_name).map((r,i)=>{
+    const co=cohortFor(r.warmness_score||0);
+    const ty=r.lead_type||"—";
+    const tyc=ty==="Existing"?"var(--steel)":"var(--ok)";
+    return `<tr><td class="num">${i+1}</td><td class="mono">${r.crm_lead_id}</td><td>${r.customer_name||"—"}</td>
+      <td class="mono">${r.phone_number}</td>
+      <td><span class="badge" style="background:color-mix(in srgb,${tyc} 16%,transparent);color:${tyc}">${ty}</span></td>
+      <td>${r.objection||"—"}</td>
+      <td class="num">${r.warmness_score??"—"}</td>
+      <td><span class="badge" style="background:${co.c};color:#fff">${r.recovery_cohort||"—"}</span></td>
+      <td><span class="badge" style="background:${r.action==='update'?'color-mix(in srgb,var(--dup) 20%,transparent)':'color-mix(in srgb,var(--ok) 18%,transparent)'};color:${r.action==='update'?'var(--dup)':'var(--ok)'}">${r.action}</span></td></tr>`;
+  }).join("");
+}
+
+function livePreview(){
+  const lead=process(readForm(),asOfDate());
+  renderReadout(lead,null);
+}
+$("analyzeBtn").addEventListener("click",()=>{
+  const lead=process(readForm(),asOfDate());
+  let sync=null;
+  if(lead.valid&&lead.objection!==UNCLASSIFIED){sync=CRM.sync(buildPayload(lead),lead.crm_intent);lead.action=sync.action;}
+  renderReadout(lead,sync);renderLedger();
+});
+
+/* lead-type funnel selector */
+$("f_leadtype").addEventListener("click",e=>{
+  const b=e.target.closest(".lt");if(!b)return;
+  $("f_leadtype").querySelectorAll(".lt").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  $("f_leadtype").dataset.val=b.dataset.v;
+  if(b.dataset.v==="New")$("f_source").value="Walk-in";
+  livePreview();
+});
+
+/* export CRM ledger straight to a file for CRM import */
+$("exportLedger").addEventListener("click",()=>{
+  const rows=[...CRM.store.values()].filter(r=>!r.seeded||r.customer_name);
+  if(!rows.length){alert("No synced leads to export yet. Analyze & sync a lead first.");return;}
+  const blob=new Blob([JSON.stringify(rows,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="crm_leads_export.json";a.click();URL.revokeObjectURL(a.href);
+});
+
+/* random sample lead loader (intake) */
+$("randomBtn").addEventListener("click",()=>{
+  const s=SAMPLE[Math.floor(Math.random()*SAMPLE.length)];
+  $("f_name").value=s.customer_name;$("f_phone").value=String(s.phone_number);$("f_email").value=s.email;
+  $("f_store").value=s.store_location;$("f_visit").value=s.visit_date;$("f_source").value=s.lead_source;
+  $("f_vehicle").value=s.interested_vehicle;$("f_channel").value=s.preferred_followup_channel;
+  $("f_bmin").value=s.budget_min_inr;$("f_bmax").value=s.budget_max_inr;$("f_reason").value=s.non_purchase_reason||"";
+  $("f_notes").value=s.sales_rep_notes||"";
+  setSeg("f_intent",s.purchase_intent);setSeg("f_testride",s.test_ride_taken);
+  setSeg("f_finance",s.financing_needed);setSeg("f_exchange",s.exchange_vehicle);
+});
+function setSeg(id,val){const seg=$(id);seg.dataset.val=val;
+  seg.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===val));}
+
+/* ============ BATCH ============ */
+function runBatch(){
+  CRM.reset();
+  const asOf=asOfDate();
+  // Funnel from lead source: Walk-in => New lead, everything else => Existing (booked & called)
+  const leads=SAMPLE.map(s=>process({...s,lead_type:s.lead_source==="Walk-in"?"New":"Existing"},asOf));
+  // Booked (existing) leads are already in the CRM from their booking — seed those records
+  leads.forEach(l=>{if(l.lead_type==="Existing"&&l.valid&&l.objection!==UNCLASSIFIED)CRM.seedExisting(l.phone_number);});
+  const seen=new Set();let synced=0,created=0,updated=0,dup=0,review=0,priority=0;
+  const results=[];
+  for(const lead of leads){
+    let bucket,sync=null;
+    if(!lead.valid){bucket="review";review++;}
+    else if(seen.has(lead.phone_number)){bucket="duplicate";dup++;}
+    else if(lead.objection===UNCLASSIFIED){bucket="review";review++;}
+    else{seen.add(lead.phone_number);sync=CRM.sync(buildPayload(lead),lead.crm_intent);
+      synced++; sync.action==="create"?created++:updated++;
+      if(lead.priority)priority++;}
+    lead.bucket=bucket||"synced";lead.sync=sync;results.push(lead);
+  }
+  renderTiles({synced,created,updated,dup,review,priority});
+  renderDistro(results.filter(r=>r.bucket==="synced"));
+  renderBatchTable(results);
+  renderLedger();
+  $("batchNote").textContent=`${CRM.store.size} leads in CRM store`;
+  $("batchDot").textContent="· "+leads.length;
+}
+function renderTiles(s){
+  const defs=[["synced","Synced",s.synced,"var(--ok)"],["created","New · walk-in",s.created,"var(--ok)"],
+    ["updated","Existing · booked",s.updated,"var(--steel)"],["dup","Duplicates",s.dup,"var(--dup)"],
+    ["review","Manual review",s.review,"var(--review)"],["priority","Priority <2h",s.priority,"var(--hot)"]];
+  $("tiles").innerHTML=defs.map(([,l,n,c])=>
+    `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div><div class="stripe" style="background:${c}"></div></div>`).join("");
+}
+function renderDistro(synced){
+  const box=$("distro");if(!synced.length){box.style.display="none";return;}box.style.display="block";
+  const counts={};CFG.cohorts.forEach(c=>counts[c.n]=0);synced.forEach(l=>counts[l.recovery_cohort]++);
+  const total=synced.length;
+  $("heatbar").innerHTML=CFG.cohorts.map(c=>{const n=counts[c.n];if(!n)return"";
+    const w=(n/total*100);return `<i style="flex:${n};background:${c.c}" title="${c.n}: ${n}">${w>7?n:""}</i>`;}).join("");
+}
+function renderBatchTable(results){
+  const tb=$("batchTable").querySelector("tbody");
+  tb.innerHTML=results.map(l=>{
+    const co=cohortFor(l.warmness_score);
+    const bmap={synced:["synced","var(--ok)"],duplicate:["duplicate","var(--dup)"],review:["review","var(--review)"]};
+    const [bl,bc]=bmap[l.bucket];
+    const actionTxt=l.sync?`${bl} · ${l.sync.action}`:bl;
+    const tyc=l.lead_type==="Existing"?"var(--steel)":"var(--ok)";
+    return `<tr>
+      <td class="mono">${l.lead_id||"—"}</td><td>${l.customer_name||"—"}</td>
+      <td><span class="badge" style="background:color-mix(in srgb,${tyc} 16%,transparent);color:${tyc}">${l.lead_type==="Existing"?"Booked":"Walk-in"}</span></td>
+      <td style="white-space:nowrap">${l.store_location||"—"}</td>
+      <td>${l.objection}${l.objection===UNCLASSIFIED?'':`<div class="src">${l.objection_source}</div>`}</td>
+      <td class="num"><span class="mini-gauge"><i style="width:${l.warmness_score}%;background:${co.c}"></i></span> ${l.warmness_score}</td>
+      <td><span class="badge" style="background:${co.c};color:#fff">${l.recovery_cohort.split(" ")[0]}</span></td>
+      <td style="max-width:260px">${l.playbook}</td>
+      <td><span class="badge" style="background:color-mix(in srgb,${bc} 16%,transparent);color:${bc}">${actionTxt}</span></td>
+    </tr>`;}).join("");
+}
+$("runBatch").addEventListener("click",runBatch);
+$("resetCrm").addEventListener("click",()=>{CRM.reset();renderLedger();
+  $("batchNote").textContent="CRM store empty";$("tiles").innerHTML="";$("distro").style.display="none";
+  $("batchTable").querySelector("tbody").innerHTML='<tr><td colspan="9" class="empty">Press <b>Run pipeline</b> to process the 40 sample showroom leads end-to-end.</td></tr>';});
+
+/* ============ tabs + theme ============ */
+function selectTab(which){
+  const intake=which==="intake";
+  $("tab-intake").setAttribute("aria-selected",intake);
+  $("tab-batch").setAttribute("aria-selected",!intake);
+  $("view-intake").classList.toggle("hide",!intake);
+  $("view-batch").classList.toggle("hide",intake);
+}
+$("tab-intake").addEventListener("click",()=>selectTab("intake"));
+$("tab-batch").addEventListener("click",()=>selectTab("batch"));
+
+$("theme").addEventListener("click",()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  const next=cur==="dark"?"light":cur==="light"?"dark":
+    (matchMedia("(prefers-color-scheme:dark)").matches?"light":"dark");
+  document.documentElement.setAttribute("data-theme",next);
+});
+
+/* refresh the live preview when the reference date changes */
+$("asof").addEventListener("change",livePreview);
+
+/* ============ SAMPLE DATA (40 showroom leads) ============ */
+const SAMPLE=[{"lead_id":"VUTTO-1001","customer_name":"Vivaan Sharma","phone_number":9445931088,"email":"vivaan.sharma@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-14","lead_source":"Walk-in","interested_vehicle":"Pulsar 150","budget_min_inr":45000,"budget_max_inr":65000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"Yes","non_purchase_reason":"Exchange value too low","sales_rep_notes":"Did not like the exchange valuation offered.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-15","next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1002","customer_name":"Sai Mishra","phone_number":9997180478,"email":"sai.mishra@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-09","lead_source":"Meta Ad","interested_vehicle":"Splendor Plus","budget_min_inr":65000,"budget_max_inr":80000,"purchase_intent":"Medium","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Condition concern","sales_rep_notes":"Wanted cleaner body condition and lower visible wear.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-09","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1003","customer_name":"Reyansh Yadav","phone_number":9633786201,"email":"reyansh.yadav@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-03","lead_source":"WhatsApp","interested_vehicle":"Jupiter","budget_min_inr":45000,"budget_max_inr":60000,"purchase_intent":"Low","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Will buy later","sales_rep_notes":"Positive interest but purchase pushed to next month.","preferred_followup_channel":"Phone Call","last_followup_date":null,"next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1004","customer_name":"Deepak Yadav","phone_number":9324017993,"email":"deepak.yadav@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-15","lead_source":"Meta Ad","interested_vehicle":"Access 125","budget_min_inr":45000,"budget_max_inr":65000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"Yes","non_purchase_reason":"Exchange value too low","sales_rep_notes":"Did not like the exchange valuation offered.","preferred_followup_channel":"WhatsApp","last_followup_date":null,"next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1005","customer_name":"Arjun Mehta","phone_number":9510026380,"email":"arjun.mehta@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-04","lead_source":"WhatsApp","interested_vehicle":"Apache RTR 160","budget_min_inr":45000,"budget_max_inr":60000,"purchase_intent":"Low","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"Yes","non_purchase_reason":"Exchange value too low","sales_rep_notes":"Did not like the exchange valuation offered.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-04","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1006","customer_name":"Aditya Mishra","phone_number":9970032313,"email":"aditya.mishra@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-04","lead_source":"Meta Ad","interested_vehicle":"Access 125","budget_min_inr":45000,"budget_max_inr":65000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Condition concern","sales_rep_notes":"Wanted cleaner body condition and lower visible wear.","preferred_followup_channel":"WhatsApp","last_followup_date":null,"next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1007","customer_name":"Vihaan Gupta","phone_number":9773522085,"email":"vihaan.gupta@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-11","lead_source":"Google Search","interested_vehicle":"Shine","budget_min_inr":75000,"budget_max_inr":90000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Family decision pending","sales_rep_notes":"Needs spouse/parent approval before buying.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-12","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1008","customer_name":"Krish Mehta","phone_number":9590812730,"email":"krish.mehta@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-10","lead_source":"Website","interested_vehicle":"Shine","budget_min_inr":35000,"budget_max_inr":50000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Trust/certification doubt","sales_rep_notes":"Asked multiple questions about certification and warranty.","preferred_followup_channel":"WhatsApp","last_followup_date":null,"next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1009","customer_name":"Vihaan Sharma","phone_number":9631544702,"email":"vihaan.sharma@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-11","lead_source":"Website","interested_vehicle":"Ntorq 125","budget_min_inr":65000,"budget_max_inr":85000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Financing rejected","sales_rep_notes":"Initial finance check did not go through.","preferred_followup_channel":"Phone Call","last_followup_date":null,"next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1010","customer_name":"Sai Mishra","phone_number":9747227599,"email":"sai.mishra@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-12","lead_source":"Walk-in","interested_vehicle":"Shine","budget_min_inr":75000,"budget_max_inr":95000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"Yes","non_purchase_reason":"Price too high","sales_rep_notes":"Customer liked the vehicle but final quote felt above budget.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-14","next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1011","customer_name":"Rohan Yadav","phone_number":9650073936,"email":"rohan.yadav@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-17","lead_source":"Website","interested_vehicle":"Apache RTR 160","budget_min_inr":75000,"budget_max_inr":90000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Financing rejected","sales_rep_notes":"Initial finance check did not go through.","preferred_followup_channel":"WhatsApp","last_followup_date":null,"next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1012","customer_name":"Sai Agarwal","phone_number":9341945074,"email":"sai.agarwal@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-12","lead_source":"WhatsApp","interested_vehicle":"Shine","budget_min_inr":35000,"budget_max_inr":50000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"Yes","non_purchase_reason":"Financing rejected","sales_rep_notes":"Initial finance check did not go through.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-13","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1013","customer_name":"Rohan Yadav","phone_number":9619357830,"email":"rohan.yadav@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-04","lead_source":"WhatsApp","interested_vehicle":"Jupiter","budget_min_inr":45000,"budget_max_inr":60000,"purchase_intent":"Low","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Comparing with other dealers","sales_rep_notes":"Plans to compare options nearby before deciding.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-06","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1014","customer_name":"Sahil Gupta","phone_number":9548859472,"email":"sahil.gupta@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-15","lead_source":"Meta Ad","interested_vehicle":"Activa 125","budget_min_inr":75000,"budget_max_inr":95000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Condition concern","sales_rep_notes":"Wanted cleaner body condition and lower visible wear.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-16","next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1015","customer_name":"Aditya Sharma","phone_number":9828418812,"email":"aditya.sharma@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-07","lead_source":"WhatsApp","interested_vehicle":"Jupiter","budget_min_inr":75000,"budget_max_inr":90000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"EMI too high","sales_rep_notes":"Interested in financing but monthly EMI felt expensive.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-08","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1016","customer_name":"Vivaan Singh","phone_number":9199965014,"email":"vivaan.singh@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-20","lead_source":"Website","interested_vehicle":"Shine","budget_min_inr":55000,"budget_max_inr":75000,"purchase_intent":"Low","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Family decision pending","sales_rep_notes":"Needs spouse/parent approval before buying.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-20","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1017","customer_name":"Aarav Gupta","phone_number":9933233886,"email":"aarav.gupta@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-14","lead_source":"Meta Ad","interested_vehicle":"Ntorq 125","budget_min_inr":45000,"budget_max_inr":65000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Financing rejected","sales_rep_notes":"Initial finance check did not go through.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-16","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1018","customer_name":"Kabir Yadav","phone_number":9778190519,"email":"kabir.yadav@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-18","lead_source":"Walk-in","interested_vehicle":"Pulsar 150","budget_min_inr":35000,"budget_max_inr":55000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Will buy later","sales_rep_notes":"Positive interest but purchase pushed to next month.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-18","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1019","customer_name":"Kunal Yadav","phone_number":9900477636,"email":"kunal.yadav@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-06","lead_source":"Website","interested_vehicle":"Ntorq 125","budget_min_inr":35000,"budget_max_inr":45000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"Yes","non_purchase_reason":"Family decision pending","sales_rep_notes":"Needs spouse/parent approval before buying.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-07","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1020","customer_name":"Rohan Yadav","phone_number":9809838129,"email":"rohan.yadav@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-02","lead_source":"Walk-in","interested_vehicle":"Jupiter","budget_min_inr":65000,"budget_max_inr":80000,"purchase_intent":"Medium","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Documentation concern","sales_rep_notes":"Concerned about RC transfer and paperwork timeline.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-03","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1021","customer_name":"Vihaan Bansal","phone_number":9609619404,"email":"vihaan.bansal@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-09","lead_source":"Referral","interested_vehicle":"Apache RTR 160","budget_min_inr":65000,"budget_max_inr":75000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Trust/certification doubt","sales_rep_notes":"Asked multiple questions about certification and warranty.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-10","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1022","customer_name":"Kunal Mishra","phone_number":9691527697,"email":"kunal.mishra@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-17","lead_source":"Google Search","interested_vehicle":"Jupiter","budget_min_inr":65000,"budget_max_inr":85000,"purchase_intent":"Medium","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"Yes","non_purchase_reason":"Condition concern","sales_rep_notes":"Wanted cleaner body condition and lower visible wear.","preferred_followup_channel":"SMS","last_followup_date":null,"next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1023","customer_name":"Deepak Jain","phone_number":9756114583,"email":"deepak.jain@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-20","lead_source":"Google Search","interested_vehicle":"Activa 125","budget_min_inr":65000,"budget_max_inr":85000,"purchase_intent":"Low","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Trust/certification doubt","sales_rep_notes":"Asked multiple questions about certification and warranty.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-22","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1024","customer_name":"Rahul Bansal","phone_number":9750671503,"email":"rahul.bansal@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-15","lead_source":"WhatsApp","interested_vehicle":"Activa 125","budget_min_inr":75000,"budget_max_inr":90000,"purchase_intent":"Medium","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"Yes","non_purchase_reason":"Documentation concern","sales_rep_notes":"Concerned about RC transfer and paperwork timeline.","preferred_followup_channel":"WhatsApp","last_followup_date":null,"next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1025","customer_name":"Ishaan Gupta","phone_number":9635953074,"email":"ishaan.gupta@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-11","lead_source":"Walk-in","interested_vehicle":"Activa 125","budget_min_inr":35000,"budget_max_inr":50000,"purchase_intent":"Low","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Documentation concern","sales_rep_notes":"Concerned about RC transfer and paperwork timeline.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-11","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1026","customer_name":"Nitin Agarwal","phone_number":9327507854,"email":"nitin.agarwal@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-13","lead_source":"Google Search","interested_vehicle":"Jupiter","budget_min_inr":65000,"budget_max_inr":80000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Exchange value too low","sales_rep_notes":"Did not like the exchange valuation offered.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-14","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1027","customer_name":"Rohan Yadav","phone_number":9594695636,"email":"rohan.yadav@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-02","lead_source":"Website","interested_vehicle":"Apache RTR 160","budget_min_inr":55000,"budget_max_inr":70000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Wanted different model","sales_rep_notes":"Asked for a different color/model not available in store.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-03","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1028","customer_name":"Aarav Mishra","phone_number":9062112775,"email":"aarav.mishra@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-12","lead_source":"Website","interested_vehicle":"Shine","budget_min_inr":35000,"budget_max_inr":50000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Condition concern","sales_rep_notes":"Wanted cleaner body condition and lower visible wear.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-13","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1029","customer_name":"Arjun Mishra","phone_number":9100087285,"email":"arjun.mishra@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-17","lead_source":"Walk-in","interested_vehicle":"Activa 125","budget_min_inr":35000,"budget_max_inr":45000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Price too high","sales_rep_notes":"Customer liked the vehicle but final quote felt above budget.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-17","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1030","customer_name":"Manish Verma","phone_number":9480292995,"email":"manish.verma@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-15","lead_source":"Referral","interested_vehicle":"Pulsar 150","budget_min_inr":35000,"budget_max_inr":45000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Will buy later","sales_rep_notes":"Positive interest but purchase pushed to next month.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-17","next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1031","customer_name":"Yash Mehta","phone_number":9431204074,"email":"yash.mehta@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-12","lead_source":"Referral","interested_vehicle":"Jupiter","budget_min_inr":75000,"budget_max_inr":95000,"purchase_intent":"Low","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Family decision pending","sales_rep_notes":"Needs spouse/parent approval before buying.","preferred_followup_channel":"Phone Call","last_followup_date":null,"next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1032","customer_name":"Sai Yadav","phone_number":9837125886,"email":"sai.yadav@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-04","lead_source":"Walk-in","interested_vehicle":"Shine","budget_min_inr":35000,"budget_max_inr":45000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Financing rejected","sales_rep_notes":"Initial finance check did not go through.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-04","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1033","customer_name":"Sahil Verma","phone_number":9067121338,"email":"sahil.verma@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-20","lead_source":"Walk-in","interested_vehicle":"Splendor Plus","budget_min_inr":35000,"budget_max_inr":55000,"purchase_intent":"High","test_ride_taken":"Yes","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Condition concern","sales_rep_notes":"Wanted cleaner body condition and lower visible wear.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-20","next_followup_date":"2026-07-22"},{"lead_id":"VUTTO-1034","customer_name":"Reyansh Yadav","phone_number":9322869962,"email":"reyansh.yadav@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-19","lead_source":"Referral","interested_vehicle":"Jupiter","budget_min_inr":55000,"budget_max_inr":75000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Documentation concern","sales_rep_notes":"Concerned about RC transfer and paperwork timeline.","preferred_followup_channel":"SMS","last_followup_date":"2026-07-20","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1035","customer_name":"Sahil Mishra","phone_number":9520660817,"email":"sahil.mishra@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-08","lead_source":"Walk-in","interested_vehicle":"Splendor Plus","budget_min_inr":55000,"budget_max_inr":70000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Family decision pending","sales_rep_notes":"Needs spouse/parent approval before buying.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-08","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1036","customer_name":"Varun Agarwal","phone_number":9760044471,"email":"varun.agarwal@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-06","lead_source":"Walk-in","interested_vehicle":"Splendor Plus","budget_min_inr":75000,"budget_max_inr":95000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"Comparing with other dealers","sales_rep_notes":"Plans to compare options nearby before deciding.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-06","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1037","customer_name":"Yash Gupta","phone_number":9572613976,"email":"yash.gupta@example.com","store_location":"Delhi - Rohini","visit_date":"2026-07-02","lead_source":"WhatsApp","interested_vehicle":"Splendor Plus","budget_min_inr":75000,"budget_max_inr":90000,"purchase_intent":"Low","test_ride_taken":"No","financing_needed":"No","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Exchange value too low","sales_rep_notes":"Did not like the exchange valuation offered.","preferred_followup_channel":"Phone Call","last_followup_date":"2026-07-02","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1038","customer_name":"Amit Sharma","phone_number":9012331865,"email":"amit.sharma@example.com","store_location":"Delhi - Dwarka","visit_date":"2026-07-05","lead_source":"Referral","interested_vehicle":"Shine","budget_min_inr":35000,"budget_max_inr":45000,"purchase_intent":"Medium","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"EMI too high","sales_rep_notes":"Interested in financing but monthly EMI felt expensive.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-07","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1039","customer_name":"Varun Mehta","phone_number":9013355202,"email":"varun.mehta@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-07","lead_source":"Referral","interested_vehicle":"Apache RTR 160","budget_min_inr":35000,"budget_max_inr":55000,"purchase_intent":"Medium","test_ride_taken":"Yes","financing_needed":"Yes","family_decision_pending":"No","exchange_vehicle":"No","non_purchase_reason":"Comparing with other dealers","sales_rep_notes":"Plans to compare options nearby before deciding.","preferred_followup_channel":"WhatsApp","last_followup_date":"2026-07-07","next_followup_date":"2026-07-27"},{"lead_id":"VUTTO-1040","customer_name":"Rahul Mehta","phone_number":9181704629,"email":"rahul.mehta@example.com","store_location":"Delhi - Lajpat Nagar","visit_date":"2026-07-02","lead_source":"Google Search","interested_vehicle":"Jupiter","budget_min_inr":35000,"budget_max_inr":50000,"purchase_intent":"High","test_ride_taken":"No","financing_needed":"Yes","family_decision_pending":"Yes","exchange_vehicle":"No","non_purchase_reason":"No immediate need","sales_rep_notes":"Just exploring options; no urgent purchase plan.","preferred_followup_channel":"SMS","last_followup_date":null,"next_followup_date":"2026-07-27"}];
+
+// initial render — live preview without a CRM write
+livePreview();
+</script>
